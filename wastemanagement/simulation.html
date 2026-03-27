@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    body {
+      background-color: transparent;
+      color: #cdd6f4;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    .container {
+      position: relative;
+      width: 800px;
+      height: 500px;
+      background-color: #181825;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      border: 1px solid #313244;
+    }
+
+    .module {
+      position: absolute;
+      background-color: #313244;
+      border: 2px solid #45475a;
+      border-radius: 8px;
+      padding: 15px;
+      text-align: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+    }
+
+    .esp32 {
+      width: 200px;
+      height: 250px;
+      top: 125px;
+      left: 300px;
+      border-color: #89b4fa;
+    }
+
+    .esp-chip {
+      width: 100px;
+      height: 100px;
+      background-color: #11111b;
+      margin: 20px auto;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: #bac2de;
+      box-shadow: inset 0 0 10px #000;
+    }
+
+    .hcsr04 {
+      width: 140px;
+      height: 120px;
+      top: 190px;
+      left: 40px;
+      border-color: #f38ba8;
+    }
+
+    .hx711 {
+      width: 140px;
+      height: 120px;
+      top: 190px;
+      left: 620px;
+      border-color: #a6e3a1;
+    }
+
+    .module-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .value-display {
+      background-color: #11111b;
+      padding: 5px;
+      border-radius: 4px;
+      color: #a6e3a1;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+
+    .terminal {
+      position: absolute;
+      bottom: 20px;
+      left: 40px;
+      width: 720px;
+      height: 90px;
+      background-color: #11111b;
+      border: 1px solid #45475a;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      color: #a6adc8;
+      overflow: hidden;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .log-line {
+      margin: 2px 0;
+    }
+
+    /* Wiring SVG */
+    #wiring {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .wire {
+      fill: none;
+      stroke: #585b70;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    .wire-active {
+      stroke-dasharray: 10;
+      animation: flow 1s linear infinite;
+    }
+
+    .wire-rx {
+      stroke: #f9e2af;
+    }
+
+    .wire-tx {
+      stroke: #89dceb;
+    }
+
+    .wire-power {
+      stroke: #f38ba8;
+    }
+
+    .wire-gnd {
+      stroke: #a6adc8;
+    }
+
+    @keyframes flow {
+      to {
+        stroke-dashoffset: -20;
+      }
+    }
+
+    .led {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: #585b70;
+      margin: 10px auto;
+    }
+
+    .led-blink {
+      animation: blink 0.5s infinite;
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        background-color: #89b4fa;
+        box-shadow: 0 0 10px #89b4fa;
+      }
+
+      50% {
+        background-color: #585b70;
+        box-shadow: none;
+      }
+    }
+
+    /* Ultrasonic eyes */
+    .eyes {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 10px;
+    }
+
+    .eye {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: repeating-radial-gradient(circle,
+          #11111b,
+          #11111b 2px,
+          #313244 3px,
+          #313244 4px);
+      border: 2px solid #11111b;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <!-- Wires -->
+    <svg id="wiring">
+      <!-- HC-SR04 to ESP32 -->
+      <path class="wire wire-gnd" d="M 180 230 C 240 230 240 230 300 230" />
+      <path class="wire wire-power" d="M 180 240 C 240 240 240 240 300 240" />
+      <path class="wire wire-tx wire-active" d="M 180 250 C 240 250 240 250 300 250" />
+      <path class="wire wire-rx wire-active" d="M 180 260 C 240 260 240 260 300 260" />
+
+      <!-- HX711 to ESP32 -->
+      <path class="wire wire-power" d="M 620 230 C 560 230 560 230 500 230" />
+      <path class="wire wire-gnd" d="M 620 240 C 560 240 560 240 500 240" />
+      <path class="wire wire-rx wire-active" d="M 620 250 C 560 250 560 250 500 250" />
+      <path class="wire wire-tx wire-active" d="M 620 260 C 560 260 560 260 500 260" />
+    </svg>
+
+    <!-- HC-SR04 -->
+    <div class="module hcsr04">
+      <div class="module-title" style="color:#f38ba8;">HC-SR04</div>
+      <div class="eyes">
+        <div class="eye"></div>
+        <div class="eye"></div>
+      </div>
+      <div class="value-display" id="dist-val">Dist: 100 cm</div>
+    </div>
+
+    <!-- ESP32 -->
+    <div class="module esp32">
+      <div class="module-title" style="color:#89b4fa;">ESP32 Microcontroller</div>
+      <div class="led led-blink"></div>
+      <div class="esp-chip">ESP-WROOM-32</div>
+      <div class="value-display" style="font-size: 11px; margin-top: 15px;">Wi-Fi: Connected</div>
+    </div>
+
+    <!-- HX711 -->
+    <div class="module hx711">
+      <div class="module-title" style="color:#a6e3a1;">HX711 Module</div>
+      <div style="width:60px; height:20px; background:#11111b; margin:10px auto; border-radius:3px;"></div>
+      <div class="value-display" id="weight-val">Wt: 0.00 kg</div>
+    </div>
+
+    <!-- Terminal Output -->
+    <div class="terminal" id="terminal">
+      <div class="log-line">> Booting ESP32...</div>
+      <div class="log-line">> Connecting to SmartWaste_WiFi... [OK]</div>
+      <div class="log-line">> Initializing HC-SR04 & HX711... [OK]</div>
+    </div>
+
+  </div>
+
+  <script>
+    const distEl = document.getElementById('dist-val');
+    const weightEl = document.getElementById('weight-val');
+    const terminal = document.getElementById('terminal');
+
+    let currentDist = 80;
+    let currentWeight = 1.25;
+
+    function addLog(msg) {
+      const el = document.createElement('div');
+      el.className = 'log-line';
+      el.innerText = `> ${msg}`;
+      terminal.appendChild(el);
+      if (terminal.childElementCount > 4) {
+        terminal.removeChild(terminal.firstChild);
+      }
+    }
+
+    setInterval(() => {
+      // Simulate minor fluctuations
+      currentDist += (Math.random() - 0.5) * 5;
+      currentWeight += (Math.random() - 0.5) * 0.2;
+
+      // keep in bounds
+      if (currentDist > 100) currentDist = 100;
+      if (currentDist < 10) currentDist = 10;
+      if (currentWeight < 0) currentWeight = 0;
+      if (currentWeight > 10) currentWeight = 10;
+
+      distEl.innerText = `Dist: ${currentDist.toFixed(1)} cm`;
+      weightEl.innerText = `Wt: ${currentWeight.toFixed(2)} kg`;
+
+      const fillLevel = 100 - currentDist;
+      const jsonStr = `{"bin_id":"BIN-001","fill_pct":${fillLevel.toFixed(1)},"weight_kg":${currentWeight.toFixed(2)}}`;
+      addLog(`Publishing MQTT: ${jsonStr}`);
+
+    }, 1200);
+  </script>
+
+</body>
+
+</html>
