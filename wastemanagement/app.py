@@ -63,6 +63,12 @@ CITIES = {
 
 WARN_LEVEL = 50
 CRIT_LEVEL = 85
+MIN_FILL_GROWTH_RATE_PER_HOUR = -0.2
+MAX_FILL_GROWTH_RATE_PER_HOUR = 3.8
+PRIORITY_WEIGHT_CURRENT_FILL = 0.45
+PRIORITY_WEIGHT_PREDICTED_FILL = 0.45
+PRIORITY_WEIGHT_STALENESS = 0.10
+STALENESS_NORMALIZATION_FACTOR = 20.0
 
 MUNICIPAL_DEPTS = pd.DataFrame([
     {"Dept_ID": "DEPT-MLR", "City": "Mangaluru", "Latitude": 12.8850, "Longitude": 74.8500}
@@ -101,11 +107,16 @@ def generate_synthetic_data(num_bins=150, seed=42):
         raw_load_cell = int(weight * 1000) + int(rng.integers(-50, 51))
         
         # Short-term prediction and priority
-        fill_growth_hr = max(0.0, rng.uniform(-0.2, 3.8))
+        fill_growth_hr = max(0.0, rng.uniform(MIN_FILL_GROWTH_RATE_PER_HOUR, MAX_FILL_GROWTH_RATE_PER_HOUR))
         predicted_fill_24h = min(100.0, max(0.0, fill_level + (fill_growth_hr * 24)))
         predicted_status = 'RED' if predicted_fill_24h > CRIT_LEVEL else ('YELLOW' if predicted_fill_24h >= WARN_LEVEL else 'GREEN')
         staleness_hours = mins_since_update / 60.0
-        priority_score = min(100.0, (0.45 * fill_level) + (0.45 * predicted_fill_24h) + (0.10 * min(100.0, staleness_hours * 20.0)))
+        priority_score = min(
+            100.0,
+            (PRIORITY_WEIGHT_CURRENT_FILL * fill_level)
+            + (PRIORITY_WEIGHT_PREDICTED_FILL * predicted_fill_24h)
+            + (PRIORITY_WEIGHT_STALENESS * min(100.0, staleness_hours * STALENESS_NORMALIZATION_FACTOR))
+        )
         
         # Color coding logic
         if fill_level > CRIT_LEVEL:
@@ -296,11 +307,10 @@ with tab1:
                         improved = True
         
         route_points = best_route
-        current_pt = route_points[-1]
             
         # 3. Add Nearest Dump Ground at the end
         dump_coords = DUMP_GROUNDS[['Latitude', 'Longitude']].values
-        dists_to_dumps = distance.cdist([[current_pt[0], current_pt[1]]], dump_coords)[0]
+        dists_to_dumps = distance.cdist([route_points[-1]], dump_coords)[0]
         nearest_dump_idx = np.argmin(dists_to_dumps)
         final_dump = DUMP_GROUNDS.iloc[nearest_dump_idx]
         route_points.append([final_dump['Latitude'], final_dump['Longitude']])
