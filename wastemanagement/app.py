@@ -154,12 +154,12 @@ if 'df_bins' not in st.session_state:
 
 # --- Sidebar Simulation Controls ---
 st.sidebar.header("⚙️ Simulation Controls")
-num_bins_control = st.sidebar.slider("Number of bins", min_value=50, max_value=500, value=int(st.session_state.num_bins), step=10)
-seed_control = int(st.sidebar.number_input("Random seed", min_value=0, max_value=999999, value=st.session_state.seed, step=1))
+num_bins_control = st.sidebar.slider("Number of bins", min_value=50, max_value=500, value=st.session_state.num_bins, step=10)
+seed_control = st.sidebar.number_input("Random seed", min_value=0, max_value=999999, value=st.session_state.seed, step=1)
 regenerate = st.sidebar.button("🔄 Regenerate Dataset")
 
 if regenerate or num_bins_control != st.session_state.num_bins or seed_control != st.session_state.seed:
-    st.session_state.num_bins = int(num_bins_control)
+    st.session_state.num_bins = num_bins_control
     st.session_state.seed = seed_control
     st.session_state.df_bins = generate_synthetic_data(st.session_state.num_bins, st.session_state.seed)
 
@@ -307,11 +307,10 @@ with tab1:
                         improved = True
         
         route_points = best_route
-        current_pt = route_points[-1]
             
         # 3. Add Nearest Dump Ground at the end
         dump_coords = DUMP_GROUNDS[['Latitude', 'Longitude']].values
-        dists_to_dumps = distance.cdist([[current_pt[0], current_pt[1]]], dump_coords)[0]
+        dists_to_dumps = distance.cdist([route_points[-1]], dump_coords)[0]
         nearest_dump_idx = np.argmin(dists_to_dumps)
         final_dump = DUMP_GROUNDS.iloc[nearest_dump_idx]
         route_points.append([final_dump['Latitude'], final_dump['Longitude']])
