@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import random
 from datetime import datetime, timedelta
+from geopy.distance import geodesic
 
 # -----------------
 # Configuration
@@ -72,31 +73,39 @@ DUMP_GROUNDS = pd.DataFrame([
 ])
 
 @st.cache_data
-def generate_synthetic_data(num_bins=150):
+def generate_synthetic_data(num_bins=150, seed=42):
     data = []
-    
+    rng = np.random.default_rng(seed)
     cities_list = list(CITIES.keys())
     for i in range(1, num_bins + 1):
-        city = random.choice(cities_list)
+        city = cities_list[int(rng.integers(0, len(cities_list)))]
         
         # Pick a major place to scatter bins around
-        place_name, p_lat, p_lon = random.choice(CITIES[city]["places"])
+        place_name, p_lat, p_lon = CITIES[city]["places"][int(rng.integers(0, len(CITIES[city]["places"])))]
         
         # Add random offset (approx 0.5-1 km) around the major place
-        lat = p_lat + random.uniform(-0.01, 0.01)
-        lon = p_lon + random.uniform(-0.01, 0.01)
+        lat = p_lat + rng.uniform(-0.01, 0.01)
+        lon = p_lon + rng.uniform(-0.01, 0.01)
         
         # Simulated Sensor Logic
-        fill_level = random.randint(0, 100)
-        weight = max(0.0, (fill_level * 0.25) + random.uniform(-1, 1)) # Weight correlates to fill
+        fill_level = int(rng.integers(0, 101))
+        weight = max(0.0, (fill_level * 0.25) + rng.uniform(-1, 1)) # Weight correlates to fill
         
         ward_name = place_name
             
-        last_updated = datetime.now() - timedelta(minutes=random.randint(1, 60))
+        mins_since_update = int(rng.integers(1, 61))
+        last_updated = datetime.now() - timedelta(minutes=mins_since_update)
         
         # Junk Values / raw sensor data map
         distance_cm = max(0, 100 - fill_level) 
-        raw_load_cell = int(weight * 1000) + random.randint(-50, 50)
+        raw_load_cell = int(weight * 1000) + int(rng.integers(-50, 51))
+        
+        # Short-term prediction and priority
+        fill_growth_hr = max(0.0, rng.uniform(-0.2, 3.8))
+        predicted_fill_24h = min(100.0, max(0.0, fill_level + (fill_growth_hr * 24)))
+        predicted_status = 'RED' if predicted_fill_24h > CRIT_LEVEL else ('YELLOW' if predicted_fill_24h >= WARN_LEVEL else 'GREEN')
+        staleness_hours = mins_since_update / 60.0
+        priority_score = min(100.0, (0.45 * fill_level) + (0.45 * predicted_fill_24h) + (0.10 * min(100.0, staleness_hours * 20.0)))
         
         # Color coding logic
         if fill_level > CRIT_LEVEL:
@@ -117,14 +126,31 @@ def generate_synthetic_data(num_bins=150):
             "Status": status,
             "Last_Updated": last_updated.strftime("%Y-%m-%d %H:%M:%S"),
             "Sensor_Distance_cm": distance_cm,
-            "Sensor_LoadCell_Raw": raw_load_cell
+            "Sensor_LoadCell_Raw": raw_load_cell,
+            "Fill_Growth_per_hr": round(fill_growth_hr, 2),
+            "Predicted_Fill_24h (%)": round(predicted_fill_24h, 2),
+            "Predicted_Status_24h": predicted_status,
+            "Priority_Score": round(priority_score, 2)
         })
         
     return pd.DataFrame(data)
 
 # Initialize Session State for Data Persistence
 if 'df_bins' not in st.session_state:
-    st.session_state.df_bins = generate_synthetic_data()
+    st.session_state.num_bins = 150
+    st.session_state.seed = 42
+    st.session_state.df_bins = generate_synthetic_data(st.session_state.num_bins, st.session_state.seed)
+
+# --- Sidebar Simulation Controls ---
+st.sidebar.header("⚙️ Simulation Controls")
+num_bins_control = st.sidebar.slider("Number of bins", min_value=50, max_value=500, value=int(st.session_state.num_bins), step=10)
+seed_control = int(st.sidebar.number_input("Random seed", min_value=0, max_value=999999, value=int(st.session_state.seed), step=1))
+regenerate = st.sidebar.button("🔄 Regenerate Dataset")
+
+if regenerate or num_bins_control != st.session_state.num_bins or seed_control != st.session_state.seed:
+    st.session_state.num_bins = int(num_bins_control)
+    st.session_state.seed = int(seed_control)
+    st.session_state.df_bins = generate_synthetic_data(st.session_state.num_bins, st.session_state.seed)
 
 df = st.session_state.df_bins
 
@@ -146,6 +172,7 @@ st.sidebar.markdown("### 🚦 Status Legend")
 st.sidebar.markdown("🔴 **Critical (>85%)**: Needs immediate collection")
 st.sidebar.markdown("🟡 **Warning (50-85%)**: Scheduled for next 24 hours")
 st.sidebar.markdown("🟢 **Clear (<50%)**: Sufficient capacity")
+st.sidebar.markdown("📈 **Predicted 24h**: Expected status based on growth trend")
 
 # --- UI Aesthetics: Top Header & KPI Cards ---
 st.title("🚯 Mangaluru Municipal Corporation: Smart Waste Management")
@@ -153,15 +180,20 @@ st.title("🚯 Mangaluru Municipal Corporation: Smart Waste Management")
 # Calculate metrics from filtered_df
 total_bins = len(filtered_df)
 red_bins = len(filtered_df[filtered_df['Status'] == 'RED'])
+predicted_red_bins = len(filtered_df[filtered_df['Predicted_Status_24h'] == 'RED'])
 total_weight = filtered_df['Weight (kg)'].sum()
+avg_priority = filtered_df['Priority_Score'].mean() if not filtered_df.empty else 0.0
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.markdown(f'<div class="kpi-card"><div class="kpi-title">Total Bins</div><div class="kpi-value">{total_bins}</div></div>', unsafe_allow_html=True)
 with col2:
     st.markdown(f'<div class="kpi-card kpi-card-danger"><div class="kpi-title">Bins Needing Attention (RED)</div><div class="kpi-value" style="color:#F44336;">{red_bins}</div></div>', unsafe_allow_html=True)
 with col3:
+    st.markdown(f'<div class="kpi-card kpi-card-danger"><div class="kpi-title">Likely Critical in 24h</div><div class="kpi-value" style="color:#F44336;">{predicted_red_bins}</div></div>', unsafe_allow_html=True)
+with col4:
     st.markdown(f'<div class="kpi-card"><div class="kpi-title">Total Waste Weight</div><div class="kpi-value">{total_weight:.2f} kg</div></div>', unsafe_allow_html=True)
+st.caption(f"Average Priority Score: **{avg_priority:.1f}/100**")
 
 # --- Tabs ---
 tab1, tab2, tab3 = st.tabs(["🗺️ Map View", "📊 Simulation Dashboard", "🔌 Hardware Circuit"])
@@ -214,6 +246,7 @@ with tab1:
 
     # --- Professional Routing (Nearest Neighbor for RED bins) ---
     red_bins_df = filtered_df[filtered_df['Status'] == 'RED']
+    route_distance_km = 0.0
     if not red_bins_df.empty:
         red_coords = red_bins_df[['Latitude', 'Longitude']].values
         depot_coords = MUNICIPAL_DEPTS[['Latitude', 'Longitude']].values
@@ -263,6 +296,7 @@ with tab1:
                         improved = True
         
         route_points = best_route
+        current_pt = route_points[-1]
             
         # 3. Add Nearest Dump Ground at the end
         dump_coords = DUMP_GROUNDS[['Latitude', 'Longitude']].values
@@ -270,6 +304,10 @@ with tab1:
         nearest_dump_idx = np.argmin(dists_to_dumps)
         final_dump = DUMP_GROUNDS.iloc[nearest_dump_idx]
         route_points.append([final_dump['Latitude'], final_dump['Longitude']])
+        
+        # 4. Compute route distance estimate (km)
+        for i in range(len(route_points) - 1):
+            route_distance_km += geodesic(route_points[i], route_points[i + 1]).km
             
         # Draw moving truck path (AntPath)
         plugins.AntPath(
@@ -282,10 +320,24 @@ with tab1:
         ).add_to(m)
 
     st_folium(m, use_container_width=True, height=600)
+    if not red_bins_df.empty:
+        st.info(f"Estimated optimized collection route distance: **{route_distance_km:.2f} km**")
+    else:
+        st.info("No RED bins currently available for optimized route generation.")
 
 with tab2:
     st.markdown("### 📊 Simulation Dashboard (Raw Data)")
     st.markdown("Displays the raw synthetic data acting as 'Junk Values' for debugging the system.")
+    st.markdown("#### 🚚 Priority Queue (Top 10 bins for dispatch)")
+    top_priority = filtered_df.sort_values("Priority_Score", ascending=False).head(10)[
+        ["Bin_ID", "Ward_Name", "Fill_Level (%)", "Predicted_Fill_24h (%)", "Priority_Score", "Status", "Predicted_Status_24h"]
+    ]
+    st.dataframe(top_priority, use_container_width=True)
+    
+    st.markdown("#### 🧭 Area-Level Risk (Average Priority by Ward)")
+    ward_priority = filtered_df.groupby("Ward_Name", as_index=False)["Priority_Score"].mean().sort_values("Priority_Score", ascending=False)
+    st.bar_chart(ward_priority.set_index("Ward_Name"))
+    
     st.dataframe(filtered_df, use_container_width=True)
     
     csv = filtered_df.to_csv(index=False).encode('utf-8')
